@@ -24,6 +24,7 @@
 [string] $SasKeyName = "account_sasPolicy"
 [string] $SasKey = "fWQgXioRFL9APZFXWLTJuYiBAOLTHN6TM+ASbMkqq74="
 [string] $TopicName ="account"
+[string] $EntityLogicalName = "account"
 
 
 Install-Module Microsoft.Xrm.Data.PowerShell -Scope CurrentUser
@@ -36,158 +37,32 @@ Write-Host "log:Connected to crm org 11" $Connection.ConnectedOrgFriendlyName
 
 Import-Module ".\D365ServiceEndpointServiceBus.psm1" -Force
 
-$EntityName = "account"
-
-$fetchXml =
-@"
-<fetch no-lock="true">
-<entity name="sdkmessagefilter">
-</entity>
-</fetch>
-"@
-
-$fetchXml =
-@"
-<fetch no-lock="true">
-<entity name="sdkmessageprocessingstep">
-</entity>
-</fetch>
-"@
-
-$EntityLogicalName = "Account"
-
-$fetchXml =
-@"
-<fetch no-lock="true">
-<entity name="sdkmessagefilter">
-    <attribute name="sdkmessagefilterid" />
-    <link-entity name="entity" from="objecttypecode" to="primaryobjecttypecode">
-        <filter>
-            <condition attribute="logicalname" operator="eq" value="$EntityLogicalName" />
-        </filter>
-    </link-entity>
-</entity>
-</fetch>
-"@
-
-$fetchXml =
-@"
-<fetch no-lock="true">
-<entity name="sdkmessageprocessingstep">
-</entity>
-</fetch>
-"@
-
-$Message = "Create"
-$fetchXml =
-@"
-<fetch no-lock="true">
-<entity name="sdkmessage">
-<attribute name="sdkmessageid" />
-<attribute name="name" />
-<filter type="and" >
-<condition attribute="name" operator="eq" value="$Message" />
-</filter>
-</entity>
-</fetch>
-"@
-
-
-
-
-#Write-Host @fetchXml
-#$result = Get-CrmRecordsByFetch -conn $Connection -Fetch $fetchXml -WarningAction SilentlyContinue
-
-#write-host $result.CrmRecords.Count
-#
-<#
-foreach ($crmRecord in $result.CrmRecords)
-{
-    Write-Host "------------------------------------------------"
-    Write-Host $crmRecord
-}
-#>
-
-#Write-Host  $result.CrmRecords[0]
-
-[GUID]$sdkmessageid = [System.guid]::New("9ebdbb1b-ea3e-db11-86a7-000a3a5473e8")
-$entityName = 1
-$fetchXml =
-@"
-<fetch no-lock="true">
-<entity name="sdkmessagefilter">
-<attribute name="primaryobjecttypecode" />
-<attribute name="sdkmessageid" />
-    <filter>
-        <condition attribute="sdkmessageid" operator="eq" value="$sdkmessageid" />
-        <condition attribute="primaryobjecttypecode" operator="eq" value="$entityName" />
-    </filter>  
-    
-</entity>    
-</fetch>
-"@
-
-$EntityLogicalName = "account"
-
-$fetchXml =
-@"
-<fetch no-lock="true">
-<entity name="sdkmessagefilter">
-    <filter>
-        <condition attribute="sdkmessageid" operator="eq" value="$sdkmessageid" />
-    </filter>
-    <link-entity name="entity" from="objecttypecode" to="primaryobjecttypecode">
-        <filter>
-            <condition attribute="logicalname" operator="eq" value="$EntityLogicalName" />
-        </filter>
-    </link-entity>
-</entity>
-</fetch>
-"@
-
-
-
-
 
 try {
 
-    $sdkmessageid = Get-SdkMessage -Connection $Connection -Message $Message 
-
-    Write-Host $sdkmessageid
-
-    $sdkmessagefilterid = Get-SdkMessageFilterRef -Connection $Connection -MessageId $sdkmessageid -EntityLogicalName $EntityLogicalName
-
-    Write-Host $sdkmessagefilterid
-   
-    $fetchXml =
-@"
-<fetch no-lock="true">
-<entity name="sdkmessageprocessingstep">
-<link-entity name="plugingtype" from="plugintypeid" to="plugintypeid">
-</link-entity>
-<filter>
-    <condition attribute="sdkmessageid" operator="eq" value="$sdkmessageid" />
-    <condition attribute="sdkmessagefilterid" operator="eq" value="$sdkmessagefilterid" />
-</filter>  
-</entity>
-</fetch>
-"@
-
-Write-Host @fetchXml
-$result = Get-CrmRecordsByFetch -conn $Connection -Fetch $fetchXml -WarningAction SilentlyContinue
-
-Write-host $result.CrmRecords.Count
-
-
-foreach ($crmRecord in $result.CrmRecords)
-{
-    Write-Host "------------------------------------------------"
-    Write-Host $crmRecord.name
-    Write-Host $crmRecord
-}
-
-    #Add-TopicServiceEndpoint -Connection $Connection -ServiceEndpointName $ServiceEndpointName -ServiceBusNamespace $ServiceBusNamespace -ServiceBusUrl $ServiceBusUrl -TopicName $TopicName -SasKeyName $SasKeyName -SasKey $SasKey
+    #Adding Service Endpint If not exists
+    $ServiceEndpointId = $null
+    $ServiceEndpointId = Add-TopicServiceEndpoint -Connection $Connection -ServiceEndpointName $ServiceEndpointName -ServiceBusNamespace $ServiceBusNamespace -ServiceBusUrl $ServiceBusUrl -TopicName $TopicName -SasKeyName $SasKeyName -SasKey $SasKey
  
+    if ($ServiceEndpointId){
+
+        Write-Host "Creating Message Processing Steps for ServiceEndpointId " $ServiceEndpointId
+
+        $message ="Update"
+        $sdkMessageProcessingStepId =  Add-EntitySdkMessageProcessingStep -Connection $Connection -ServiceEndpointId $ServiceEndpointId -EntityLogicalName $EntityLogicalName -Message $message -ServiceBusName $ServiceBusNamespace  
+
+        if ($sdkMessageProcessingStepId)
+        {
+            Write-Host "sdkMessageProcessingStepId Created : " $sdkMessageProcessingStepId
+        }else{
+            Write-Host "sdkMessageProcessingStepId NOT created"
+        }
+        
+    }else
+    {
+        Write-Host "No Service Endpoint Reference found or created"
+    }
+
     #Remove-ServiceEndpoint -Connection $Connection -ServiceEndpointName $ServiceEndpointName
     exit 0
 } catch {
